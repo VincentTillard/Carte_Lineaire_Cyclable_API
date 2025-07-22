@@ -91,7 +91,7 @@
       const nom = props.nom_officiel || "Nom non renseigné";
       const v2019 = parseFloat(props["2019"]) || 0;
       const v2024 = parseFloat(props["2024"]) || 0;
-      const valeurAffichee = props["2022"] ?? "N/A";
+      const valeurAffichee = props["2024"] ?? "N/A";
       const id = "chart-" + L.stamp(layer);
 
       const annees = ["2019", "2020", "2021", "2022", "2023", "2024"];
@@ -107,7 +107,7 @@
 
       const popupContent = `
         <strong>${nom}</strong><br/>
-        ${valeurAffichee} milliers de trajets / jour (2022)<br/>
+        ${valeurAffichee} milliers de trajets / jour (2024)<br/>
         <canvas id="${id}" width="300" height="150"></canvas>
         ${variationText}
       `;
