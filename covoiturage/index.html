@@ -139,11 +139,10 @@
 
     L.control.fullscreen().addTo(map);
 
-    const breaks = [0.0, 1.0, 3.0, 10.0, 30.0, 70.0, 155.0];
+    const breaks = [0.0, 2.0, 7.0, 20.0, 50.0, 155.0];
 
     function getColor(d) {
-      return d > breaks[5] ? '#800026' :
-             d > breaks[4] ? '#E31A1C' :
+      return d > breaks[4] ? '#800026' :
              d > breaks[3] ? '#FC4E2A' :
              d > breaks[2] ? '#FD8D3C' :
              d > breaks[1] ? '#FED976' :
