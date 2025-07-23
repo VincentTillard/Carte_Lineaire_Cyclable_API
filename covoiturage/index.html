@@ -18,17 +18,43 @@
       box-shadow: 0 0 15px rgba(0, 0, 0, 0.2);
       border-radius: 5px;
     }
+    .info.legend strong {
+      display: block;
+      margin-bottom: 6px;
+    }
+    .info.legend div {
+      display: block;
+      margin: 4px 0;
+    }
     .info.legend i {
       width: 18px;
       height: 18px;
-      float: left;
+      display: inline-block;
       margin-right: 8px;
+      vertical-align: middle;
       opacity: 0.7;
     }
     .popup-variation {
       color: red;
       font-weight: bold;
       margin-top: 6px;
+    }
+    .leaflet-control-fullscreen {
+      background: white;
+      padding: 4px;
+      border: 2px solid rgba(0, 0, 0, 0.2);
+      border-radius: 4px;
+      margin-top: 5px; /* Espace sous les boutons de zoom */
+    }
+    .leaflet-control-fullscreen a {
+      display: block;
+      width: 26px;
+      height: 26px;
+      background: url('https://unpkg.com/leaflet@1.9.3/dist/images/layers.png') no-repeat 0 -26px;
+      cursor: pointer;
+    }
+    .leaflet-control-fullscreen.leaflet-fullscreen-on a {
+      background-position: -26px -26px;
     }
   </style>
 </head>
@@ -64,6 +90,55 @@
       }
     ).addTo(map);
 
+    // Contrôle plein écran
+    L.Control.Fullscreen = L.Control.extend({
+      options: { position: 'topleft' },
+      onAdd: function (map) {
+        var container = L.DomUtil.create('div', 'leaflet-control-fullscreen leaflet-bar');
+        var button = L.DomUtil.create('a', '', container);
+        button.title = 'Plein écran';
+        L.DomEvent.on(button, 'click', this._toggleFullscreen, this);
+        this._map = map;
+        this._container = container;
+        return container;
+      },
+      _toggleFullscreen: function () {
+        var mapContainer = this._map.getContainer();
+        if (!document.fullscreenElement &&
+            !document.webkitFullscreenElement &&
+            !document.mozFullScreenElement &&
+            !document.msFullscreenElement) {
+          if (mapContainer.requestFullscreen) {
+            mapContainer.requestFullscreen();
+          } else if (mapContainer.webkitRequestFullscreen) {
+            mapContainer.webkitRequestFullscreen();
+          } else if (mapContainer.mozRequestFullScreen) {
+            mapContainer.mozRequestFullScreen();
+          } else if (mapContainer.msRequestFullscreen) {
+            mapContainer.msRequestFullscreen();
+          }
+          L.DomUtil.addClass(this._container, 'leaflet-fullscreen-on');
+        } else {
+          if (document.exitFullscreen) {
+            document.exitFullscreen();
+          } else if (document.webkitExitFullscreen) {
+            document.webkitExitFullscreen();
+          } else if (document.mozCancelFullScreen) {
+            document.mozCancelFullScreen();
+          } else if (document.msExitFullscreen) {
+            document.msExitFullscreen();
+          }
+          L.DomUtil.removeClass(this._container, 'leaflet-fullscreen-on');
+        }
+      }
+    });
+
+    L.control.fullscreen = function (opts) {
+      return new L.Control.Fullscreen(opts);
+    };
+
+    L.control.fullscreen().addTo(map);
+
     const breaks = [0.0, 1.0, 3.0, 10.0, 30.0, 70.0, 155.0];
 
     function getColor(d) {
@@ -91,7 +166,7 @@
       const nom = props.nom_officiel || "Nom non renseigné";
       const v2019 = parseFloat(props["2019"]) || 0;
       const v2024 = parseFloat(props["2024"]) || 0;
-      const valeurAffichee = props["2024"] ?? "N/A";
+      const valeurAffichee = props["2024"] !== null && props["2024"] !== undefined ? props["2024"].toFixed(1) : "N/A";
       const id = "chart-" + L.stamp(layer);
 
       const annees = ["2019", "2020", "2021", "2022", "2023", "2024"];
@@ -213,13 +288,13 @@
 
     legend.onAdd = function (map) {
       var div = L.DomUtil.create('div', 'info legend');
-      div.innerHTML += '<strong>Milliers de trajets / jour (2024)</strong><br>';
+      div.innerHTML += '<strong>Milliers de trajets / jour (2024)</strong>';
       for (var i = 0; i < breaks.length - 1; i++) {
         const from = breaks[i];
         const to = breaks[i + 1];
         div.innerHTML +=
-          '<i style="background:' + getColor(from + 0.001) + '"></i> ' +
-          from.toFixed(1) + ' – ' + to.toFixed(1) + '<br>';
+          '<div><i style="background:' + getColor(from + 0.001) + '"></i> ' +
+          from.toFixed(1) + ' – ' + to.toFixed(1) + '</div>';
       }
       return div;
     };
