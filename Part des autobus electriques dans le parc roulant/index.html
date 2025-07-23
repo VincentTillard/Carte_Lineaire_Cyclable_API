@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <title>Choroplèthe Part des autobus électriques 2019–2024</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    #map {
+      height: 90vh;
+      width: 100%;
+    }
+    .info.legend {
+      background: white;
+      padding: 6px 10px;
+      font: 14px/16px Arial, sans-serif;
+      box-shadow: 0 0 15px rgba(0, 0, 0, 0.2);
+      border-radius: 5px;
+    }
+    .info.legend i {
+      width: 18px;
+      height: 18px;
+      float: left;
+      margin-right: 8px;
+      opacity: 0.7;
+    }
+    .popup-variation {
+      color: red;
+      font-weight: bold;
+      margin-top: 6px;
+    }
+  </style>
+</head>
+<body>
+  <div id="map"></div>
+
+  <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+  <script>
+    var map = L.map('map').setView([49.0, 0.7], 8);
+
+    var OpenStreetMap = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 19,
+      attribution: '© OpenStreetMap contributors'
+    }).addTo(map);
+
+    var ignPlan = L.tileLayer(
+      'https://data.geopf.fr/wmts?service=WMTS&request=GetTile&version=1.0.0&tilematrixset=PM&tilematrix={z}&tilecol={x}&tilerow={y}&layer=GEOGRAPHICALGRIDSYSTEMS.PLANIGNV2&format=image/png&style=normal',
+      {
+        maxZoom: 19,
+        attribution: '© IGN'
+      }
+    );
+
+    var perimetre = L.layerGroup();
+
+    L.control.layers(
+      {
+        'OpenStreetMap': OpenStreetMap,
+        'Plan': ignPlan
+      },
+      {
+        'Périmètre': perimetre
+      }
+    ).addTo(map);
+
+    const breaks = [0.0, 1.0, 3.0, 7.0, 12.0, 20.5];
+
+    function getColor(d) {
+      return d > breaks[4] ? '#800026' :
+             d > breaks[3] ? '#FC4E2A' :
+             d > breaks[2] ? '#FD8D3C' :
+             d > breaks[1] ? '#FED976' :
+                             '#FFEDA0';
+    }
+
+    function style(feature) {
+      return {
+        fillColor: getColor(feature.properties['2024']),
+        weight: 1,
+        opacity: 1,
+        color: 'white',
+        dashArray: '3',
+        fillOpacity: 0.7
+      };
+    }
+
+    function onEachFeature(feature, layer) {
+      const props = feature.properties;
+      const nom = props.nom_officiel || "Nom non renseigné";
+      const v2019 = parseFloat(props["2019"]) || 0;
+      const v2024 = parseFloat(props["2024"]) || 0;
+      const valeurAffichee = props["2024"] !== null && props["2024"] !== undefined ? props["2024"].toFixed(1) : "N/A";
+      const id = "chart-" + L.stamp(layer);
+
+      const annees = ["2019", "2020", "2021", "2022", "2023", "2024"];
+      const data = annees.map(a => parseFloat(props[a]) || 0);
+      
+      // Trouver la première année non nulle
+      let startIndex = 0;
+      for (let i = 0; i < data.length; i++) {
+        if (data[i] !== 0) {
+          startIndex = i;
+          break;
+        }
+      }
+      const filteredAnnees = annees.slice(startIndex);
+      const filteredData = data.slice(startIndex);
+
+      let variationText = "";
+      if (v2019 > 0) {
+        const variation = ((v2024 - v2019) / v2019) * 100;
+        variationText = `<div class="popup-variation">Évolution 2019 → 2024 : ${variation.toFixed(1)}%</div>`;
+      } else {
+        variationText = `<div class="popup-variation">Évolution 2019 → 2024 : N/A</div>`;
+      }
+
+      const popupContent = `
+        <strong>${nom}</strong><br/>
+        ${valeurAffichee} % (2024)<br/>
+        <canvas id="${id}" width="300" height="150"></canvas>
+        ${variationText}
+      `;
+
+      layer.bindPopup(popupContent);
+
+      layer.on('popupopen', function () {
+        const ctx = document.getElementById(id);
+        if (ctx) {
+          new Chart(ctx, {
+            type: 'line',
+            data: {
+              labels: filteredAnnees,
+              datasets: [{
+                label: 'Part des autobus électriques (%)',
+                data: filteredData,
+                borderColor: '#e31a1c',
+                backgroundColor: 'rgba(227,26,28,0.2)',
+                fill: true,
+                tension: 0.3,
+                pointRadius: 4,
+                pointHoverRadius: 6
+              }]
+            },
+            options: {
+              responsive: false,
+              plugins: {
+                legend: { display: false }
+              },
+              scales: {
+                y: {
+                  min: 0,
+                  max: 20.5,
+                  ticks: { stepSize: 5.0 }
+                }
+              }
+            }
+          });
+        }
+      });
+    }
+
+    // Appel API et transformation en GeoJSON
+    fetch('https://www.datanormandie.fr/d4c/api/records/1.0/search/?dataset=cop_mieux_se_deplacer&resource_id=22933db8-c1b5-438c-9763-5227b5a8560a&rows=70&facet=cleabs')
+      .then(response => response.json())
+      .then(apiData => {
+        const features = apiData.records
+          .map(record => {
+            let geom = record.fields.geo_shape;
+
+            // Si geo_shape est une string JSON, on parse en objet
+            if (typeof geom === "string") {
+              try {
+                geom = JSON.parse(geom);
+              } catch (e) {
+                console.warn("Erreur de parsing geo_shape :", e);
+                return null; // On ignore ce record
+              }
+            }
+
+            const type = geom?.type;
+            const coords = geom?.coordinates;
+
+            if (!geom || !type || !coords || !(type === "Polygon" || type === "MultiPolygon")) {
+              console.warn("Géométrie invalide ignorée :", record.fields.nom_officiel);
+              return null;
+            }
+
+            const props = {
+              nom_officiel: record.fields.nom_officiel,
+              "2019": parseFloat(record.fields.unsafe_2019),
+              "2020": parseFloat(record.fields.unsafe_2020),
+              "2021": parseFloat(record.fields.unsafe_2021),
+              "2022": parseFloat(record.fields.unsafe_2022),
+              "2023": parseFloat(record.fields.unsafe_2023),
+              "2024": parseFloat(record.fields.unsafe_2024)
+            };
+
+            return {
+              type: "Feature",
+              geometry: geom,
+              properties: props
+            };
+          })
+          .filter(f => f !== null);
+
+        const geojson = {
+          type: "FeatureCollection",
+          features: features
+        };
+
+        L.geoJSON(geojson, {
+          style: style,
+          onEachFeature: onEachFeature
+        }).addTo(map);
+      })
+      .catch(error => {
+        console.error("Erreur lors de l'appel à l'API :", error);
+        alert("Erreur de chargement des données depuis l'API.");
+      });
+
+    var legend = L.control({position: 'bottomright'});
+
+    legend.onAdd = function (map) {
+      var div = L.DomUtil.create('div', 'info legend');
+      div.innerHTML += '<strong>Part des autobus électriques (%) – 2024</strong><br>';
+      for (var i = 0; i < breaks.length - 1; i++) {
+        const from = breaks[i];
+        const to = breaks[i + 1];
+        div.innerHTML +=
+          '<i style="background:' + getColor(from + 0.001) + '"></i> ' +
+          from.toFixed(1) + ' – ' + to.toFixed(1) + '<br>';
+      }
+      return div;
+    };
+
+    legend.addTo(map);
+  </script>
+</body>
+</html>
